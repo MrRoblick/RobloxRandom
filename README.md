@@ -14,9 +14,9 @@ Generating vectors:<br>
 <img width="688" height="113" alt="изображение" src="https://github.com/user-attachments/assets/ff510837-ec08-4fa4-a5fa-9c27f14195f5" /><br>
 
 ### single mode
-<img width="776" height="90" alt="изображение" src="https://github.com/user-attachments/assets/a44a085a-4ba2-4691-b937-53875aeb936a" />
+<img width="776" height="90" alt="изображение" src="https://github.com/user-attachments/assets/a44a085a-4ba2-4691-b937-53875aeb936a" /><br>
 Roblox output:<br>
-<img width="782" height="437" alt="изображение" src="https://github.com/user-attachments/assets/83f8d40e-1b02-4f24-acda-a3718df1ebe6" />
+<img width="782" height="437" alt="изображение" src="https://github.com/user-attachments/assets/83f8d40e-1b02-4f24-acda-a3718df1ebe6" /><br>
 
 
 
