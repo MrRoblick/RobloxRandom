@@ -7,7 +7,8 @@ int main()
 	Random rand{ 3344556767 };
 
 	for (int i = 0; i < 10; i++) {
-		std::cout << rand.next_number(0.0, 1000.0) << '\n';
+		auto vec = rand.next_unit_vector();
+		std::cout << vec.x << ", " << vec.y << ", " << vec.z << '\n';
 	}
 
 	auto seed = Random::find_seed(6767, 0, 14888);

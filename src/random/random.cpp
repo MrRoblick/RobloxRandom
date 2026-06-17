@@ -217,6 +217,30 @@ double Random::next_number(double arg1, double arg2) {
     return result;
 }
 
+Vector3 Random::next_unit_vector() {
+    uint64_t current_state = state;
+
+    uint64_t next_state = current_state * PCG_MULTIPLIER + PCG_INCREMENT;
+    state = next_state * PCG_MULTIPLIER + PCG_INCREMENT;
+
+    uint32_t rand_low = std::rotr<uint32_t>(static_cast<uint32_t>((current_state >> 27) ^ (current_state >> 45)), static_cast<int>(current_state >> 59));
+    uint32_t rand_high = std::rotr<uint32_t>(static_cast<uint32_t>((next_state >> 27) ^ (next_state >> 45)), static_cast<int>(next_state >> 59));
+
+    double v2 = std::ldexp(static_cast<double>(rand_low), -32);
+    double v3 = std::ldexp(static_cast<double>(rand_high), -32);
+
+    float x_angle = static_cast<float>(v2 * 6.283185307179586);
+
+    float z = static_cast<float>(v3 * 2.0 - 1.0);
+
+    float r_xy = std::sqrt(1.0f - z * z);
+
+    return Vector3{
+        std::cos(x_angle) * r_xy,
+        std::sin(x_angle) * r_xy,
+        z
+    };
+}
 
 std::optional<uint64_t> Random::find_seed(int64_t target, int64_t min_val, int64_t max_val) {
     uint64_t range = max_val - min_val;
