@@ -4,6 +4,7 @@
 #include <chrono>
 #include <thread>
 #include <atomic>
+#include <cmath>
 
 #if defined(_WIN32) || defined(_WIN64)
 #ifndef WIN32_LEAN_AND_MEAN
@@ -155,8 +156,8 @@ Random::Random(uint64_t seed) {
 }
 
 uint64_t Random::next_integer(int64_t _min, int64_t _max) {
-    uint64_t min_val = (std::min)(_min, _max);
-    uint64_t max_val = (std::max)(_min, _max);
+    uint64_t min_val = (std::min)(static_cast<uint64_t>(_min), static_cast<uint64_t>(_max));
+    uint64_t max_val = (std::max)(static_cast<uint64_t>(_min), static_cast<uint64_t>(_max));
     uint64_t range = max_val - min_val;
 
     uint64_t next_state1 = PCG_MULTIPLIER * state + PCG_INCREMENT;
@@ -282,8 +283,8 @@ std::optional<uint64_t> Random::find_seed(int64_t target, int64_t min_val, int64
 std::optional<uint64_t> Random::find_seed_from_sequence(const std::vector<int64_t>& sequence, int64_t _min, int64_t _max) {
     if (sequence.empty()) return std::nullopt;
 
-    uint64_t min_val = (std::min)(_min, _max);
-    uint64_t max_val = (std::max)(_min, _max);
+    uint64_t min_val = (std::min)(static_cast<uint64_t>(_min), static_cast<uint64_t>(_max));
+    uint64_t max_val = (std::max)(static_cast<uint64_t>(_min), static_cast<uint64_t>(_max));
     uint64_t range = max_val - min_val;
 
     if (range == 0) return std::nullopt;
@@ -348,8 +349,8 @@ std::optional<uint64_t> Random::find_seed_from_sequence(const std::vector<Target
     std::vector<PrepTarget> prep;
     prep.reserve(targets.size());
     for (const auto& t : targets) {
-        uint64_t t_min = (std::min)(t.min_val, t.max_val);
-        uint64_t t_max = (std::max)(t.min_val, t.max_val);
+        uint64_t t_min = (std::min)(static_cast<uint64_t>(t.min_val), static_cast<uint64_t>(t.max_val));
+        uint64_t t_max = (std::max)(static_cast<uint64_t>(t.min_val), static_cast<uint64_t>(t.max_val));
         uint64_t t_range = t_max - t_min;
         prep.push_back({
             t_min,
@@ -407,7 +408,7 @@ std::optional<uint64_t> Random::find_seed_from_sequence(const std::vector<Target
         threads.emplace_back([&, start_seed, end_seed]() {
             for (uint64_t seed = start_seed; seed <= end_seed; ) {
                 if (found.load(std::memory_order_relaxed)) return;
-                uint64_t limit = (std::min)(seed + 15000ULL, end_seed);
+                uint64_t limit = (std::min)(static_cast<uint64_t>(seed + 15000ULL), end_seed);
                 for (; seed <= limit; ++seed) {
                     if (check_seed(seed)) {
                         result_seed.store(seed);
@@ -432,8 +433,8 @@ std::optional<uint64_t> Random::find_seed_from_sequence(const std::vector<Target
     bool found_small_range = false;
 
     for (size_t i = 0; i < targets.size(); ++i) {
-        uint64_t t_min = (std::min)(targets[i].min_val, targets[i].max_val);
-        uint64_t t_max = (std::max)(targets[i].min_val, targets[i].max_val);
+        uint64_t t_min = (std::min)(static_cast<uint64_t>(targets[i].min_val), static_cast<uint64_t>(targets[i].max_val));
+        uint64_t t_max = (std::max)(static_cast<uint64_t>(targets[i].min_val), static_cast<uint64_t>(targets[i].max_val));
         uint64_t t_range = t_max - t_min;
         if ((t_range >> 1) <= 0x7FFFFFFE) {
             if (t_range > max_range) {
@@ -449,8 +450,8 @@ std::optional<uint64_t> Random::find_seed_from_sequence(const std::vector<Target
     }
 
     const auto& best_target = targets[best_idx];
-    uint64_t min_val = (std::min)(best_target.min_val, best_target.max_val);
-    uint64_t max_val = (std::max)(best_target.min_val, best_target.max_val);
+    uint64_t min_val = (std::min)(static_cast<uint64_t>(best_target.min_val), static_cast<uint64_t>(best_target.max_val));
+    uint64_t max_val = (std::max)(static_cast<uint64_t>(best_target.min_val), static_cast<uint64_t>(best_target.max_val));
     uint64_t range = max_val - min_val;
 
     uint64_t total_values = range + 1;
@@ -480,8 +481,8 @@ std::optional<uint64_t> Random::find_seed_from_sequence(const std::vector<Target
 
                 uint64_t current_state = candidate_state_at_best_idx;
                 for (int i = static_cast<int>(best_idx) - 1; i >= 0; --i) {
-                    uint64_t t_min = (std::min)(targets[i].min_val, targets[i].max_val);
-                    uint64_t t_max = (std::max)(targets[i].min_val, targets[i].max_val);
+                    uint64_t t_min = (std::min)(static_cast<uint64_t>(targets[i].min_val), static_cast<uint64_t>(targets[i].max_val));
+                    uint64_t t_max = (std::max)(static_cast<uint64_t>(targets[i].min_val), static_cast<uint64_t>(targets[i].max_val));
                     uint64_t t_range = t_max - t_min;
                     if ((t_range >> 1) > 0x7FFFFFFE) {
                         current_state = (current_state - PCG_INCREMENT) * M_INV;
@@ -496,8 +497,8 @@ std::optional<uint64_t> Random::find_seed_from_sequence(const std::vector<Target
                 uint64_t test_state = current_state;
 
                 for (size_t i = 0; i < targets.size(); ++i) {
-                    uint64_t t_min = (std::min)(targets[i].min_val, targets[i].max_val);
-                    uint64_t t_max = (std::max)(targets[i].min_val, targets[i].max_val);
+                    uint64_t t_min = (std::min)(static_cast<uint64_t>(targets[i].min_val), static_cast<uint64_t>(targets[i].max_val));
+                    uint64_t t_max = (std::max)(static_cast<uint64_t>(targets[i].min_val), static_cast<uint64_t>(targets[i].max_val));
                     uint64_t t_range = t_max - t_min;
 
                     uint64_t next_state1 = PCG_MULTIPLIER * test_state + PCG_INCREMENT;
