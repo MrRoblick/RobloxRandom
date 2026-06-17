@@ -1,6 +1,6 @@
 # Roblox Random PCG CLI Tool
 
-A lightweight C++ command-line utility designed to replicate, generate, and reverse-engineer (crack) the PCG-based pseudorandom number generator (PRNG) used in Roblox (`Random.new()`).
+A lightweight C++ command-line utility designed to generate, and reverse-engineer (crack) the PCG-based pseudorandom number generator (PRNG) used in Roblox (`Random.new()`).
 
 ## Features
 * **Crack Mode:** Reverse-engineer and find the initial 64-bit seed using a sequence of generated numbers from a file.
