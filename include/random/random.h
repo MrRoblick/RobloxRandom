@@ -10,6 +10,12 @@ struct Vector3 {
     float z;
 };
 
+struct TargetInfo {
+    int64_t target;
+    int64_t min_val;
+    int64_t max_val;
+};
+
 class Random {
 private:
     static constexpr uint64_t PCG_MULTIPLIER = 0x5851F42D4C957F2DULL;
@@ -58,5 +64,6 @@ public:
     }
 
     static std::optional<uint64_t> find_seed(int64_t target, int64_t min_val, int64_t max_val);
-    static std::optional<uint64_t> find_seed_from_sequence(const std::vector<int64_t>& sequence, int64_t _min, int64_t _max);
+    static std::optional<uint64_t> find_seed_from_sequence(const std::vector<int64_t>& sequence, int64_t _min, int64_t _max); // simple cracker for x32 seeds
+    static std::optional<uint64_t> find_seed_from_sequence(const std::vector<TargetInfo>& targets); // powerful cracker for x64/x32 seeds
 };

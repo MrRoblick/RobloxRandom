@@ -2,6 +2,8 @@
 #include <algorithm>
 #include <bit>
 #include <chrono>
+#include <thread>
+#include <atomic>
 
 #if defined(_WIN32) || defined(_WIN64)
 #ifndef WIN32_LEAN_AND_MEAN
@@ -327,5 +329,215 @@ std::optional<uint64_t> Random::find_seed_from_sequence(const std::vector<int64_
             }
         }
     }
+    return std::nullopt;
+}
+
+std::optional<uint64_t> Random::find_seed_from_sequence(const std::vector<TargetInfo>& targets) {
+    if (targets.empty()) {
+        return std::nullopt;
+    }
+
+    struct PrepTarget {
+        uint64_t min_val;
+        uint64_t range;
+        uint64_t total_vals;
+        int64_t target;
+        bool is_large;
+    };
+
+    std::vector<PrepTarget> prep;
+    prep.reserve(targets.size());
+    for (const auto& t : targets) {
+        uint64_t t_min = (std::min)(t.min_val, t.max_val);
+        uint64_t t_max = (std::max)(t.min_val, t.max_val);
+        uint64_t t_range = t_max - t_min;
+        prep.push_back({
+            t_min,
+            t_range,
+            t_range + 1,
+            t.target,
+            (t_range >> 1) > 0x7FFFFFFE
+            });
+    }
+
+    auto check_seed = [&](uint64_t seed) -> bool {
+        uint64_t s = (105ULL + seed) * PCG_MULTIPLIER + PCG_INCREMENT;
+        for (size_t i = 0; i < prep.size(); ++i) {
+            uint64_t next_s = PCG_MULTIPLIER * s + PCG_INCREMENT;
+            uint32_t check_low = std::rotr<uint32_t>(static_cast<uint32_t>((s >> 27) ^ (s >> 45)), static_cast<int>(s >> 59));
+            uint64_t generated = 0;
+            if (prep[i].is_large) {
+                uint32_t check_high = std::rotr<uint32_t>(static_cast<uint32_t>((next_s >> 27) ^ (next_s >> 45)), static_cast<int>(next_s >> 59));
+                s = PCG_MULTIPLIER * next_s + PCG_INCREMENT;
+                if (prep[i].total_vals == 0) {
+                    generated = check_low | (static_cast<uint64_t>(check_high) << 32);
+                }
+                else {
+                    uint32_t total_vals_lo = static_cast<uint32_t>(prep[i].total_vals);
+                    uint32_t total_vals_hi = static_cast<uint32_t>(prep[i].total_vals >> 32);
+                    uint64_t term1 = (static_cast<uint64_t>(check_high) * total_vals_lo) >> 32;
+                    uint64_t term2 = static_cast<uint64_t>(check_high) * total_vals_hi;
+                    uint64_t term3 = (static_cast<uint64_t>(check_low) * total_vals_hi) >> 32;
+                    generated = term1 + term2 + prep[i].min_val + term3;
+                }
+            }
+            else {
+                s = next_s;
+                generated = prep[i].min_val + ((static_cast<uint64_t>(check_low) * prep[i].total_vals) >> 32);
+            }
+            if (generated != static_cast<uint64_t>(prep[i].target)) {
+                return false;
+            }
+        }
+        return true;
+        };
+
+    std::atomic<bool> found{ false };
+    std::atomic<uint64_t> result_seed{ 0 };
+
+    unsigned int num_threads = std::thread::hardware_concurrency();
+    if (num_threads == 0) num_threads = 4;
+
+    std::vector<std::thread> threads;
+    uint64_t chunk_size = (1ULL << 32) / num_threads;
+
+    for (unsigned int t = 0; t < num_threads; ++t) {
+        uint64_t start_seed = t * chunk_size;
+        uint64_t end_seed = (t == num_threads - 1) ? 0xFFFFFFFFULL : (start_seed + chunk_size - 1);
+        threads.emplace_back([&, start_seed, end_seed]() {
+            for (uint64_t seed = start_seed; seed <= end_seed; ) {
+                if (found.load(std::memory_order_relaxed)) return;
+                uint64_t limit = (std::min)(seed + 15000ULL, end_seed);
+                for (; seed <= limit; ++seed) {
+                    if (check_seed(seed)) {
+                        result_seed.store(seed);
+                        found.store(true);
+                        return;
+                    }
+                }
+            }
+            });
+    }
+
+    for (auto& th : threads) {
+        if (th.joinable()) th.join();
+    }
+
+    if (found.load()) {
+        return result_seed.load();
+    }
+
+    size_t best_idx = 0;
+    uint64_t max_range = 0;
+    bool found_small_range = false;
+
+    for (size_t i = 0; i < targets.size(); ++i) {
+        uint64_t t_min = (std::min)(targets[i].min_val, targets[i].max_val);
+        uint64_t t_max = (std::max)(targets[i].min_val, targets[i].max_val);
+        uint64_t t_range = t_max - t_min;
+        if ((t_range >> 1) <= 0x7FFFFFFE) {
+            if (t_range > max_range) {
+                max_range = t_range;
+                best_idx = i;
+                found_small_range = true;
+            }
+        }
+    }
+
+    if (!found_small_range) {
+        return std::nullopt;
+    }
+
+    const auto& best_target = targets[best_idx];
+    uint64_t min_val = (std::min)(best_target.min_val, best_target.max_val);
+    uint64_t max_val = (std::max)(best_target.min_val, best_target.max_val);
+    uint64_t range = max_val - min_val;
+
+    uint64_t total_values = range + 1;
+    uint64_t target_offset = static_cast<uint64_t>(best_target.target) - min_val;
+
+    uint64_t rand_low_min = (target_offset * (1ULL << 32) + total_values - 1) / total_values;
+    uint64_t rand_low_max = (((target_offset + 1) * (1ULL << 32)) - 1) / total_values;
+
+    constexpr uint64_t M_INV = 0xC097EF87329E28A5ULL;
+
+    for (uint64_t r_low = rand_low_min; r_low <= rand_low_max; ++r_low) {
+        uint32_t rand_low_aligned = static_cast<uint32_t>(r_low);
+
+        for (uint32_t rotation = 0; rotation < 32; ++rotation) {
+            uint32_t unrotated = std::rotl<uint32_t>(rand_low_aligned, rotation);
+
+            uint32_t part1 = unrotated & 0xFFF80000;
+            uint32_t part2 = (unrotated & 0x0007C000) ^ (rotation << 14);
+            uint32_t high_parts = part1 | part2;
+            uint32_t low_parts = (unrotated ^ (high_parts >> 18)) & 0x00003FFF;
+
+            uint32_t x = high_parts | low_parts;
+            uint64_t state_base = (static_cast<uint64_t>(rotation) << 59) | (static_cast<uint64_t>(x) << 27);
+
+            for (uint64_t low_bits = 0; low_bits < (1ULL << 27); ++low_bits) {
+                uint64_t candidate_state_at_best_idx = state_base | low_bits;
+
+                uint64_t current_state = candidate_state_at_best_idx;
+                for (int i = static_cast<int>(best_idx) - 1; i >= 0; --i) {
+                    uint64_t t_min = (std::min)(targets[i].min_val, targets[i].max_val);
+                    uint64_t t_max = (std::max)(targets[i].min_val, targets[i].max_val);
+                    uint64_t t_range = t_max - t_min;
+                    if ((t_range >> 1) > 0x7FFFFFFE) {
+                        current_state = (current_state - PCG_INCREMENT) * M_INV;
+                        current_state = (current_state - PCG_INCREMENT) * M_INV;
+                    }
+                    else {
+                        current_state = (current_state - PCG_INCREMENT) * M_INV;
+                    }
+                }
+
+                bool is_valid_seed = true;
+                uint64_t test_state = current_state;
+
+                for (size_t i = 0; i < targets.size(); ++i) {
+                    uint64_t t_min = (std::min)(targets[i].min_val, targets[i].max_val);
+                    uint64_t t_max = (std::max)(targets[i].min_val, targets[i].max_val);
+                    uint64_t t_range = t_max - t_min;
+
+                    uint64_t next_state1 = PCG_MULTIPLIER * test_state + PCG_INCREMENT;
+                    uint32_t check_low = std::rotr<uint32_t>(static_cast<uint32_t>((test_state >> 27) ^ (test_state >> 45)), static_cast<int>(test_state >> 59));
+
+                    uint64_t generated = 0;
+                    if ((t_range >> 1) > 0x7FFFFFFE) {
+                        uint32_t check_high = std::rotr<uint32_t>(static_cast<uint32_t>((next_state1 >> 27) ^ (next_state1 >> 45)), static_cast<int>(next_state1 >> 59));
+                        test_state = PCG_MULTIPLIER * next_state1 + PCG_INCREMENT;
+                        uint64_t total_vals = t_range + 1;
+                        if (total_vals == 0) {
+                            generated = check_low | (static_cast<uint64_t>(check_high) << 32);
+                        }
+                        else {
+                            uint32_t total_vals_lo = static_cast<uint32_t>(total_vals);
+                            uint32_t total_vals_hi = static_cast<uint32_t>(total_vals >> 32);
+                            uint64_t term1 = (static_cast<uint64_t>(check_high) * total_vals_lo) >> 32;
+                            uint64_t term2 = static_cast<uint64_t>(check_high) * total_vals_hi;
+                            uint64_t term3 = (static_cast<uint64_t>(check_low) * total_vals_hi) >> 32;
+                            generated = term1 + term2 + t_min + term3;
+                        }
+                    }
+                    else {
+                        test_state = next_state1;
+                        generated = t_min + ((static_cast<uint64_t>(check_low) * (t_range + 1)) >> 32);
+                    }
+
+                    if (generated != static_cast<uint64_t>(targets[i].target)) {
+                        is_valid_seed = false;
+                        break;
+                    }
+                }
+
+                if (is_valid_seed) {
+                    uint64_t seed = ((current_state - PCG_INCREMENT) * M_INV - PCG_INCREMENT);
+                    return seed;
+                }
+            }
+        }
+    }
+
     return std::nullopt;
 }
