@@ -276,3 +276,56 @@ std::optional<uint64_t> Random::find_seed(int64_t target, int64_t min_val, int64
 
     return std::nullopt;
 }
+
+std::optional<uint64_t> Random::find_seed_from_sequence(const std::vector<int64_t>& sequence, int64_t _min, int64_t _max) {
+    if (sequence.empty()) return std::nullopt;
+
+    uint64_t min_val = (std::min)(_min, _max);
+    uint64_t max_val = (std::max)(_min, _max);
+    uint64_t range = max_val - min_val;
+
+    if (range == 0) return std::nullopt;
+
+    bool is_large_range = ((range >> 1) > 0x7FFFFFFE);
+    int64_t first_target = sequence[0];
+
+    for (uint64_t seed = 0; seed <= 0xFFFFFFFFULL; ++seed) {
+
+        uint64_t current_state = (105ULL + seed) * PCG_MULTIPLIER + PCG_INCREMENT;
+        int64_t generated;
+
+        if (is_large_range) {
+            Random test_rand(seed);
+            generated = test_rand.next_integer(_min, _max);
+            if (generated == first_target) {
+                bool match = true;
+                for (size_t i = 1; i < sequence.size(); ++i) {
+                    if (test_rand.next_integer(_min, _max) != sequence[i]) {
+                        match = false;
+                        break;
+                    }
+                }
+                if (match) return seed;
+            }
+        }
+        else {
+            uint32_t rand_low = std::rotr<uint32_t>(static_cast<uint32_t>((current_state >> 27) ^ (current_state >> 45)), static_cast<int>(current_state >> 59));
+            generated = min_val + ((static_cast<uint64_t>(rand_low) * (range + 1)) >> 32);
+
+            if (generated == first_target) {
+                Random test_rand(seed);
+                test_rand.next_integer(_min, _max);
+
+                bool match = true;
+                for (size_t i = 1; i < sequence.size(); ++i) {
+                    if (test_rand.next_integer(_min, _max) != sequence[i]) {
+                        match = false;
+                        break;
+                    }
+                }
+                if (match) return seed;
+            }
+        }
+    }
+    return std::nullopt;
+}

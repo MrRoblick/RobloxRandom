@@ -2,6 +2,7 @@
 #include <atomic>
 #include <cstdint>
 #include <optional>
+#include <vector>
 
 struct Vector3 {
     float x;
@@ -57,4 +58,5 @@ public:
     }
 
     static std::optional<uint64_t> find_seed(int64_t target, int64_t min_val, int64_t max_val);
+    static std::optional<uint64_t> find_seed_from_sequence(const std::vector<int64_t>& sequence, int64_t _min, int64_t _max);
 };
