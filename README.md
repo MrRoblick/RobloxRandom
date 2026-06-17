@@ -5,11 +5,11 @@
 ### gen mode
 Generating integers:
 without seed:
-<img width="919" height="212" alt="изображение" src="https://github.com/user-attachments/assets/1990c796-6ff2-4fc4-90f0-a6cb95519d42" />
+<img width="919" height="212" alt="изображение" src="https://github.com/user-attachments/assets/1990c796-6ff2-4fc4-90f0-a6cb95519d42" /><br>
 with seed:
-<img width="973" height="187" alt="изображение" src="https://github.com/user-attachments/assets/062105da-2b6b-42ab-8cb2-b4b898707605" />
+<img width="973" height="187" alt="изображение" src="https://github.com/user-attachments/assets/062105da-2b6b-42ab-8cb2-b4b898707605" /><br>
 Generating numbers:
-<img width="945" height="118" alt="изображение" src="https://github.com/user-attachments/assets/a22b8047-12ce-41ca-a6ec-b4260f122329" />
+<img width="945" height="118" alt="изображение" src="https://github.com/user-attachments/assets/a22b8047-12ce-41ca-a6ec-b4260f122329" /><br>
 Generating vectors:
 <img width="688" height="113" alt="изображение" src="https://github.com/user-attachments/assets/ff510837-ec08-4fa4-a5fa-9c27f14195f5" />
 
