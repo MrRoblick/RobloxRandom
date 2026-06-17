@@ -4,7 +4,7 @@ A lightweight C++ command-line utility designed to generate, and reverse-enginee
 
 ## Features
 * **Crack Mode:** Reverse-engineer and find the initial 64-bit seed using a sequence of generated numbers from a file.
-* **Single Mode:** Brute-force/find a valid seed using just a single target value within a specific range.
+* **Single Mode:** Find a valid seed using just a single target value within a specific range.
 * **Generation Mode:** Generate reproducible random integers, floating-point numbers, and unit vectors identical to Roblox's native `Random` object behavior.
 
 ---
