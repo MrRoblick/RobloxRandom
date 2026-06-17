@@ -11,8 +11,9 @@
 void print_usage() {
     std::cout << "Roblox PCG Random CLI Tool\n";
     std::cout << "Usage:\n";
-    std::cout << "  roblox_random crack <filename> <min> <max>\n";
-    std::cout << "  roblox_random gen <method> [options]\n\n";
+    std::cout << "  roblox_random crack <filename> <min> <max>  - Crack seed using a sequence from a file\n";
+    std::cout << "  roblox_random single <target> <min> <max>   - Find a seed using a single target value\n";
+    std::cout << "  roblox_random gen <method> [options]        - Generate random numbers/vectors\n\n";
     std::cout << "Methods:\n";
     std::cout << "  int        Generate integers using next_integer(min, max)\n";
     std::cout << "  num        Generate floating-point numbers using next_number(min, max)\n";
@@ -69,6 +70,29 @@ int main(int argc, char* argv[]) {
         }
         else {
             std::cout << "FAILED! Seed not found or search space exhausted.\n";
+        }
+        return 0;
+    }
+    else if (mode == "single") {
+        if (argc < 5) {
+            std::cout << "Error: Missing arguments for single mode.\n";
+            std::cout << "Usage: roblox_random single <target> <min> <max>\n";
+            return 1;
+        }
+
+        int64_t target = std::stoll(argv[2]);
+        int64_t min_val = std::stoll(argv[3]);
+        int64_t max_val = std::stoll(argv[4]);
+
+        std::cout << "Attempting to find seed for target value " << target << " in range [" << min_val << ", " << max_val << "]...\n";
+
+        auto seed = Random::find_seed(target, min_val, max_val);
+        if (seed.has_value()) {
+            std::cout << "SUCCESS! Seed found: " << seed.value() << "\n";
+            std::cout << "Note: Since only one number was provided, other seeds may produce the same output.\n";
+        }
+        else {
+            std::cout << "FAILED! Seed not found. Ensure the target belongs to the given bounds.\n";
         }
         return 0;
     }
