@@ -1,24 +1,16 @@
 ﻿#include <iostream>
 #include <cstdint>
+#include <vector>
 #include <random/random.h>
+
 
 int main()
 {
 	Random rand{ 3344556767 };
-
-	for (int i = 0; i < 10; i++) {
-		auto vec = rand.next_unit_vector();
-		std::cout << vec.x << ", " << vec.y << ", " << vec.z << '\n';
-	}
-
-	auto seed = Random::find_seed(6767, 0, 14888);
-	if (seed.has_value()) {
-		std::cout << "Seed found: " << *seed << '\n';
-		return 0;
-	}
-	else {
-		std::cout << "Seed not found\n";
-		return 1;
+	std::vector<int> data{ 4,8,9,1,0,100,300,500,200 };
+	rand.shuffle(data);
+	for (auto v : data) {
+		std::cout << v << '\n';
 	}
 	return 0;
 }

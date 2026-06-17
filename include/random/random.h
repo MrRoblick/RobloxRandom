@@ -45,5 +45,16 @@ public:
     double next_number(double _min, double _max);
     Vector3 next_unit_vector();
 
+    template <typename Container>
+    void shuffle(Container& container) {
+        auto size = std::size(container);
+        if (size <= 1) return;
+        for (auto i = size; i >= 2; --i) {
+            auto j = next_integer(1, i);
+            using std::swap;
+            swap(container[j - 1], container[i - 1]);
+        }
+    }
+
     static std::optional<uint64_t> find_seed(int64_t target, int64_t min_val, int64_t max_val);
 };
