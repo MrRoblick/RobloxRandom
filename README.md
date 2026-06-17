@@ -1,4 +1,4 @@
-# [Project Name]
+# RobloxRandom
 
 A powerful CLI tool designed for generating random data (integers, floats, vectors) using seeds, as well as testing or cracking pseudorandom number generator (PRNG) outputs, with native support for Roblox environments.
 
