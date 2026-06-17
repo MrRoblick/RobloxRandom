@@ -185,6 +185,39 @@ uint64_t Random::next_integer(int64_t _min, int64_t _max) {
     }
 }
 
+double Random::next_double() {
+    uint64_t current_state = state;
+
+    uint64_t next_state = current_state * PCG_MULTIPLIER + PCG_INCREMENT;
+    state = next_state * PCG_MULTIPLIER + PCG_INCREMENT;
+
+    uint32_t rand_low = std::rotr<uint32_t>(static_cast<uint32_t>((current_state >> 27) ^ (current_state >> 45)), static_cast<int>(current_state >> 59));
+    uint32_t rand_high = std::rotr<uint32_t>(static_cast<uint32_t>((next_state >> 27) ^ (next_state >> 45)), static_cast<int>(next_state >> 59));
+
+    uint64_t rand64 = (static_cast<uint64_t>(rand_high) << 32) | rand_low;
+
+    return std::ldexp(static_cast<double>(rand64), -64);
+}
+
+double Random::next_number() {
+    return next_double();
+}
+
+double Random::next_number(double arg1, double arg2) {
+    double min_val = (std::min)(arg1, arg2);
+    double max_val = (std::max)(arg1, arg2);
+
+    double r = next_double();
+
+    double result = r * max_val + (1.0 - r) * min_val;
+
+    if (result < min_val) return min_val;
+    if (result > max_val) return max_val;
+
+    return result;
+}
+
+
 std::optional<uint64_t> Random::find_seed(int64_t target, int64_t min_val, int64_t max_val) {
     uint64_t range = max_val - min_val;
 
