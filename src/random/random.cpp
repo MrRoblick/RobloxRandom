@@ -39,7 +39,7 @@ uint64_t Random::get_nanoseconds_float() {
     auto seconds = std::chrono::duration_cast<std::chrono::seconds>(duration).count();
     auto nanoseconds = std::chrono::duration_cast<std::chrono::nanoseconds>(duration).count() % 1000000000LL;
 
-    if constexpr (float_arith00 && (float_arith01 & 1) != 0) {
+    if constexpr (USE_ALT_FLOAT_ARITHMETIC && (FLOAT_ARITHMETIC_MASK & 1) != 0) {
         return static_cast<uint64_t>(nanoseconds) + 1000000000ULL * seconds;
     }
     else {
@@ -66,35 +66,36 @@ uint64_t Random::get_current_thread_id() {
 }
 
 uint64_t Random::entropy_seed() {
-    uint64_t v8 = global_entropy_seed.load(std::memory_order_relaxed);
-    if (!v8) {
-        uint64_t v1 = 7ULL * get_nanoseconds_monotonic();
-        uint64_t v2 = 97ULL * get_microseconds_realtime();
-        uint64_t v3 = 997ULL * get_current_pid();
-        uint64_t v4 = 1997ULL * get_current_thread_id();
+    uint64_t base_seed = global_entropy_seed.load(std::memory_order_relaxed);
+    if (!base_seed) {
+        uint64_t mono_ns_contrib = 7ULL * get_nanoseconds_monotonic();
+        uint64_t real_us_contrib = 97ULL * get_microseconds_realtime();
+        uint64_t pid_contrib = 997ULL * get_current_pid();
+        uint64_t tid_contrib = 1997ULL * get_current_thread_id();
+        uint64_t float_ns_contrib = 19997ULL * get_nanoseconds_float();
 
-        uintptr_t stack_addr = reinterpret_cast<uintptr_t>(&v8);
+        uintptr_t stack_addr = reinterpret_cast<uintptr_t>(&base_seed);
         uintptr_t global_addr = reinterpret_cast<uintptr_t>(&global_entropy_seed);
 
-        v8 = v4
-            ^ (19997ULL * get_nanoseconds_float())
-            ^ v3
-            ^ v2
-            ^ v1
+        base_seed = tid_contrib
+            ^ float_ns_contrib
+            ^ pid_contrib
+            ^ real_us_contrib
+            ^ mono_ns_contrib
             ^ static_cast<uint64_t>(stack_addr)
             ^ (static_cast<uint64_t>(global_addr) << 32);
     }
 
     uint32_t current_counter = entropy_counter.fetch_add(1, std::memory_order_relaxed);
-    uint64_t v5 = v8 ^ static_cast<uint64_t>(2 * current_counter);
+    uint64_t mixed_entropy = base_seed ^ static_cast<uint64_t>(2 * current_counter);
 
-    uint64_t v6 = PCG_MULTIPLIER * v5 + PCG_INCREMENT;
-    global_entropy_seed.store(PCG_MULTIPLIER * v6 + PCG_INCREMENT, std::memory_order_relaxed);
+    uint64_t pcg_state = PCG_MULTIPLIER * mixed_entropy + PCG_INCREMENT;
+    global_entropy_seed.store(PCG_MULTIPLIER * pcg_state + PCG_INCREMENT, std::memory_order_relaxed);
 
-    uint32_t high = std::rotr<uint32_t>(static_cast<uint32_t>((v6 >> 27) ^ (v6 >> 45)), static_cast<int>(v6 >> 59));
-    uint32_t low = std::rotr<uint32_t>(static_cast<uint32_t>((v5 >> 27) ^ (v8 >> 45)), static_cast<int>(v8 >> 59));
+    uint32_t pcg_high = std::rotr<uint32_t>(static_cast<uint32_t>((pcg_state >> 27) ^ (pcg_state >> 45)), static_cast<int>(pcg_state >> 59));
+    uint32_t pcg_low = std::rotr<uint32_t>(static_cast<uint32_t>((mixed_entropy >> 27) ^ (base_seed >> 45)), static_cast<int>(base_seed >> 59));
 
-    return (static_cast<uint64_t>(high) << 32) | low;
+    return (static_cast<uint64_t>(pcg_high) << 32) | pcg_low;
 }
 
 void Random::safe_gen_entropy_seed() {
@@ -106,40 +107,40 @@ void Random::safe_gen_entropy_seed() {
 }
 
 uint64_t Random::hash_seed(std::atomic<uint64_t>& entropy_seed_value_ptr) {
-    uint64_t v1 = entropy_seed_value_ptr.load(std::memory_order_relaxed);
-    uint64_t v2 = PCG_MULTIPLIER * v1 + PCG_INCREMENT;
+    uint64_t initial_seed = entropy_seed_value_ptr.load(std::memory_order_relaxed);
+    uint64_t next_seed_step = PCG_MULTIPLIER * initial_seed + PCG_INCREMENT;
 
     while (true) {
-        uint64_t expected = v1;
-        if (entropy_seed_value_ptr.compare_exchange_strong(expected, v2, std::memory_order_acq_rel, std::memory_order_relaxed)) {
+        uint64_t expected = initial_seed;
+        if (entropy_seed_value_ptr.compare_exchange_strong(expected, next_seed_step, std::memory_order_acq_rel, std::memory_order_relaxed)) {
             break;
         }
-        v1 = expected;
-        v2 = PCG_MULTIPLIER * v1 + PCG_INCREMENT;
+        initial_seed = expected;
+        next_seed_step = PCG_MULTIPLIER * initial_seed + PCG_INCREMENT;
     }
 
-    uint64_t v5 = entropy_seed_value_ptr.load(std::memory_order_relaxed);
-    uint64_t v6 = PCG_MULTIPLIER * v5 + PCG_INCREMENT;
+    uint64_t final_seed = entropy_seed_value_ptr.load(std::memory_order_relaxed);
+    uint64_t final_next_step = PCG_MULTIPLIER * final_seed + PCG_INCREMENT;
 
     while (true) {
-        uint64_t expected = v5;
-        if (entropy_seed_value_ptr.compare_exchange_strong(expected, v6, std::memory_order_acq_rel, std::memory_order_relaxed)) {
+        uint64_t expected = final_seed;
+        if (entropy_seed_value_ptr.compare_exchange_strong(expected, final_next_step, std::memory_order_acq_rel, std::memory_order_relaxed)) {
             break;
         }
-        v5 = expected;
-        v6 = PCG_MULTIPLIER * v5 + PCG_INCREMENT;
+        final_seed = expected;
+        final_next_step = PCG_MULTIPLIER * final_seed + PCG_INCREMENT;
     }
 
-    uint32_t high = std::rotr<uint32_t>(static_cast<uint32_t>((v5 >> 27) ^ (v5 >> 45)), static_cast<int>(v5 >> 59));
-    uint32_t low = std::rotr<uint32_t>(static_cast<uint32_t>((v1 >> 27) ^ (v1 >> 45)), static_cast<int>(v1 >> 59));
+    uint32_t pcg_high = std::rotr<uint32_t>(static_cast<uint32_t>((final_seed >> 27) ^ (final_seed >> 45)), static_cast<int>(final_seed >> 59));
+    uint32_t pcg_low = std::rotr<uint32_t>(static_cast<uint32_t>((initial_seed >> 27) ^ (initial_seed >> 45)), static_cast<int>(initial_seed >> 59));
 
-    return (static_cast<uint64_t>(high) << 32) | low;
+    return (static_cast<uint64_t>(pcg_high) << 32) | pcg_low;
 }
 
 uint64_t Random::generate_roblox_default_seed() {
     safe_gen_entropy_seed();
-    uint64_t hashed = hash_seed(global_entropy_seed_value);
-    return PCG_MULTIPLIER * hashed + 0x399D2694695129DELL;
+    uint64_t hashed_entropy = hash_seed(global_entropy_seed_value);
+    return PCG_MULTIPLIER * hashed_entropy + 0x399D2694695129DELL;
 }
 
 
@@ -155,17 +156,17 @@ Random::Random(uint64_t seed) {
     state = temp_state;
 }
 
-uint64_t Random::next_integer(int64_t _min, int64_t _max) {
-    uint64_t min_val = (std::min)(static_cast<uint64_t>(_min), static_cast<uint64_t>(_max));
-    uint64_t max_val = (std::max)(static_cast<uint64_t>(_min), static_cast<uint64_t>(_max));
-    uint64_t range = max_val - min_val;
+uint64_t Random::next_integer(int64_t min_val, int64_t max_val) {
+    uint64_t clean_min = (std::min)(static_cast<uint64_t>(min_val), static_cast<uint64_t>(max_val));
+    uint64_t clean_max = (std::max)(static_cast<uint64_t>(min_val), static_cast<uint64_t>(max_val));
+    uint64_t range = clean_max - clean_min;
 
-    uint64_t next_state1 = PCG_MULTIPLIER * state + PCG_INCREMENT;
+    uint64_t next_state_step = PCG_MULTIPLIER * state + PCG_INCREMENT;
     uint32_t rand_low = std::rotr<uint32_t>(static_cast<uint32_t>((state >> 27) ^ (state >> 45)), static_cast<int>(state >> 59));
 
     if ((range >> 1) > 0x7FFFFFFE) {
-        uint32_t rand_high = std::rotr<uint32_t>(static_cast<uint32_t>((next_state1 >> 27) ^ (next_state1 >> 45)), static_cast<int>(next_state1 >> 59));
-        state = PCG_MULTIPLIER * next_state1 + PCG_INCREMENT;
+        uint32_t rand_high = std::rotr<uint32_t>(static_cast<uint32_t>((next_state_step >> 27) ^ (next_state_step >> 45)), static_cast<int>(next_state_step >> 59));
+        state = PCG_MULTIPLIER * next_state_step + PCG_INCREMENT;
         uint64_t total_values = range + 1;
 
         if (total_values == 0) {
@@ -179,12 +180,12 @@ uint64_t Random::next_integer(int64_t _min, int64_t _max) {
             uint64_t term2 = static_cast<uint64_t>(rand_high) * total_values_hi;
             uint64_t term3 = (static_cast<uint64_t>(rand_low) * total_values_hi) >> 32;
 
-            return term1 + term2 + min_val + term3;
+            return term1 + term2 + clean_min + term3;
         }
     }
     else {
-        state = next_state1;
-        return min_val + ((static_cast<uint64_t>(rand_low) * (range + 1)) >> 32);
+        state = next_state_step;
+        return clean_min + ((static_cast<uint64_t>(rand_low) * (range + 1)) >> 32);
     }
 }
 
@@ -206,16 +207,15 @@ double Random::next_number() {
     return next_double();
 }
 
-double Random::next_number(double arg1, double arg2) {
-    double min_val = (std::min)(arg1, arg2);
-    double max_val = (std::max)(arg1, arg2);
+double Random::next_number(double min_val, double max_val) {
+    double clean_min = (std::min)(min_val, max_val);
+    double clean_max = (std::max)(min_val, max_val);
 
-    double r = next_double();
+    double progress = next_double();
+    double result = progress * clean_max + (1.0 - progress) * clean_min;
 
-    double result = r * max_val + (1.0 - r) * min_val;
-
-    if (result < min_val) return min_val;
-    if (result > max_val) return max_val;
+    if (result < clean_min) return clean_min;
+    if (result > clean_max) return clean_max;
 
     return result;
 }
@@ -229,19 +229,17 @@ Vector3 Random::next_unit_vector() {
     uint32_t rand_low = std::rotr<uint32_t>(static_cast<uint32_t>((current_state >> 27) ^ (current_state >> 45)), static_cast<int>(current_state >> 59));
     uint32_t rand_high = std::rotr<uint32_t>(static_cast<uint32_t>((next_state >> 27) ^ (next_state >> 45)), static_cast<int>(next_state >> 59));
 
-    double v2 = std::ldexp(static_cast<double>(rand_low), -32);
-    double v3 = std::ldexp(static_cast<double>(rand_high), -32);
+    double angle_fraction = std::ldexp(static_cast<double>(rand_low), -32);
+    double height_fraction = std::ldexp(static_cast<double>(rand_high), -32);
 
-    float x_angle = static_cast<float>(v2 * 6.283185307179586);
-
-    float z = static_cast<float>(v3 * 2.0 - 1.0);
-
-    float r_xy = std::sqrt(1.0f - z * z);
+    float azimuth_angle = static_cast<float>(angle_fraction * 6.283185307179586);
+    float z_coord = static_cast<float>(height_fraction * 2.0 - 1.0);
+    float radius_xy = std::sqrt(1.0f - z_coord * z_coord);
 
     return Vector3{
-        std::cos(x_angle) * r_xy,
-        std::sin(x_angle) * r_xy,
-        z
+        std::cos(azimuth_angle) * radius_xy,
+        std::sin(azimuth_angle) * radius_xy,
+        z_coord
     };
 }
 
@@ -263,8 +261,8 @@ std::optional<uint64_t> Random::find_seed(int64_t target, int64_t min_val, int64
         return x_high | x_low;
         };
 
-    uint32_t x = unxor_xsh_rr(static_cast<uint32_t>(target_rand_low));
-    uint64_t state_base = static_cast<uint64_t>(x) << 27;
+    uint32_t unxored_val = unxor_xsh_rr(static_cast<uint32_t>(target_rand_low));
+    uint64_t state_base = static_cast<uint64_t>(unxored_val) << 27;
 
     constexpr uint64_t M_INV = 0xC097EF87329E28A5ULL;
 
@@ -280,12 +278,12 @@ std::optional<uint64_t> Random::find_seed(int64_t target, int64_t min_val, int64
     return std::nullopt;
 }
 
-std::optional<uint64_t> Random::find_seed_from_sequence(const std::vector<int64_t>& sequence, int64_t _min, int64_t _max) {
+std::optional<uint64_t> Random::find_seed_from_sequence(const std::vector<int64_t>& sequence, int64_t min_val, int64_t max_val) {
     if (sequence.empty()) return std::nullopt;
 
-    uint64_t min_val = (std::min)(static_cast<uint64_t>(_min), static_cast<uint64_t>(_max));
-    uint64_t max_val = (std::max)(static_cast<uint64_t>(_min), static_cast<uint64_t>(_max));
-    uint64_t range = max_val - min_val;
+    uint64_t clean_min = (std::min)(static_cast<uint64_t>(min_val), static_cast<uint64_t>(max_val));
+    uint64_t clean_max = (std::max)(static_cast<uint64_t>(min_val), static_cast<uint64_t>(max_val));
+    uint64_t range = clean_max - clean_min;
 
     if (range == 0) return std::nullopt;
 
@@ -299,11 +297,11 @@ std::optional<uint64_t> Random::find_seed_from_sequence(const std::vector<int64_
 
         if (is_large_range) {
             Random test_rand(seed);
-            generated = test_rand.next_integer(_min, _max);
+            generated = test_rand.next_integer(min_val, max_val);
             if (generated == first_target) {
                 bool match = true;
                 for (size_t i = 1; i < sequence.size(); ++i) {
-                    if (test_rand.next_integer(_min, _max) != sequence[i]) {
+                    if (test_rand.next_integer(min_val, max_val) != sequence[i]) {
                         match = false;
                         break;
                     }
@@ -313,15 +311,15 @@ std::optional<uint64_t> Random::find_seed_from_sequence(const std::vector<int64_
         }
         else {
             uint32_t rand_low = std::rotr<uint32_t>(static_cast<uint32_t>((current_state >> 27) ^ (current_state >> 45)), static_cast<int>(current_state >> 59));
-            generated = min_val + ((static_cast<uint64_t>(rand_low) * (range + 1)) >> 32);
+            generated = clean_min + ((static_cast<uint64_t>(rand_low) * (range + 1)) >> 32);
 
             if (generated == first_target) {
                 Random test_rand(seed);
-                test_rand.next_integer(_min, _max);
+                test_rand.next_integer(min_val, max_val);
 
                 bool match = true;
                 for (size_t i = 1; i < sequence.size(); ++i) {
-                    if (test_rand.next_integer(_min, _max) != sequence[i]) {
+                    if (test_rand.next_integer(min_val, max_val) != sequence[i]) {
                         match = false;
                         break;
                     }
@@ -338,7 +336,7 @@ std::optional<uint64_t> Random::find_seed_from_sequence(const std::vector<Target
         return std::nullopt;
     }
 
-    struct PrepTarget {
+    struct PreparedTarget {
         uint64_t min_val;
         uint64_t range;
         uint64_t total_vals;
@@ -346,13 +344,13 @@ std::optional<uint64_t> Random::find_seed_from_sequence(const std::vector<Target
         bool is_large;
     };
 
-    std::vector<PrepTarget> prep;
-    prep.reserve(targets.size());
+    std::vector<PreparedTarget> prepared_targets;
+    prepared_targets.reserve(targets.size());
     for (const auto& t : targets) {
         uint64_t t_min = (std::min)(static_cast<uint64_t>(t.min_val), static_cast<uint64_t>(t.max_val));
         uint64_t t_max = (std::max)(static_cast<uint64_t>(t.min_val), static_cast<uint64_t>(t.max_val));
         uint64_t t_range = t_max - t_min;
-        prep.push_back({
+        prepared_targets.push_back({
             t_min,
             t_range,
             t_range + 1,
@@ -362,31 +360,31 @@ std::optional<uint64_t> Random::find_seed_from_sequence(const std::vector<Target
     }
 
     auto check_seed = [&](uint64_t seed) -> bool {
-        uint64_t s = (105ULL + seed) * PCG_MULTIPLIER + PCG_INCREMENT;
-        for (size_t i = 0; i < prep.size(); ++i) {
-            uint64_t next_s = PCG_MULTIPLIER * s + PCG_INCREMENT;
-            uint32_t check_low = std::rotr<uint32_t>(static_cast<uint32_t>((s >> 27) ^ (s >> 45)), static_cast<int>(s >> 59));
+        uint64_t active_state = (105ULL + seed) * PCG_MULTIPLIER + PCG_INCREMENT;
+        for (size_t i = 0; i < prepared_targets.size(); ++i) {
+            uint64_t next_state_step = PCG_MULTIPLIER * active_state + PCG_INCREMENT;
+            uint32_t check_low = std::rotr<uint32_t>(static_cast<uint32_t>((active_state >> 27) ^ (active_state >> 45)), static_cast<int>(active_state >> 59));
             uint64_t generated = 0;
-            if (prep[i].is_large) {
-                uint32_t check_high = std::rotr<uint32_t>(static_cast<uint32_t>((next_s >> 27) ^ (next_s >> 45)), static_cast<int>(next_s >> 59));
-                s = PCG_MULTIPLIER * next_s + PCG_INCREMENT;
-                if (prep[i].total_vals == 0) {
+            if (prepared_targets[i].is_large) {
+                uint32_t check_high = std::rotr<uint32_t>(static_cast<uint32_t>((next_state_step >> 27) ^ (next_state_step >> 45)), static_cast<int>(next_state_step >> 59));
+                active_state = PCG_MULTIPLIER * next_state_step + PCG_INCREMENT;
+                if (prepared_targets[i].total_vals == 0) {
                     generated = check_low | (static_cast<uint64_t>(check_high) << 32);
                 }
                 else {
-                    uint32_t total_vals_lo = static_cast<uint32_t>(prep[i].total_vals);
-                    uint32_t total_vals_hi = static_cast<uint32_t>(prep[i].total_vals >> 32);
+                    uint32_t total_vals_lo = static_cast<uint32_t>(prepared_targets[i].total_vals);
+                    uint32_t total_vals_hi = static_cast<uint32_t>(prepared_targets[i].total_vals >> 32);
                     uint64_t term1 = (static_cast<uint64_t>(check_high) * total_vals_lo) >> 32;
                     uint64_t term2 = static_cast<uint64_t>(check_high) * total_vals_hi;
                     uint64_t term3 = (static_cast<uint64_t>(check_low) * total_vals_hi) >> 32;
-                    generated = term1 + term2 + prep[i].min_val + term3;
+                    generated = term1 + term2 + prepared_targets[i].min_val + term3;
                 }
             }
             else {
-                s = next_s;
-                generated = prep[i].min_val + ((static_cast<uint64_t>(check_low) * prep[i].total_vals) >> 32);
+                active_state = next_state_step;
+                generated = prepared_targets[i].min_val + ((static_cast<uint64_t>(check_low) * prepared_targets[i].total_vals) >> 32);
             }
-            if (generated != static_cast<uint64_t>(prep[i].target)) {
+            if (generated != static_cast<uint64_t>(prepared_targets[i].target)) {
                 return false;
             }
         }
@@ -473,8 +471,8 @@ std::optional<uint64_t> Random::find_seed_from_sequence(const std::vector<Target
             uint32_t high_parts = part1 | part2;
             uint32_t low_parts = (unrotated ^ (high_parts >> 18)) & 0x00003FFF;
 
-            uint32_t x = high_parts | low_parts;
-            uint64_t state_base = (static_cast<uint64_t>(rotation) << 59) | (static_cast<uint64_t>(x) << 27);
+            uint32_t unxored_val = high_parts | low_parts;
+            uint64_t state_base = (static_cast<uint64_t>(rotation) << 59) | (static_cast<uint64_t>(unxored_val) << 27);
 
             for (uint64_t low_bits = 0; low_bits < (1ULL << 27); ++low_bits) {
                 uint64_t candidate_state_at_best_idx = state_base | low_bits;

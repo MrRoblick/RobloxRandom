@@ -8,6 +8,7 @@ endif()
 project ("RobloxRandom")
 
 add_executable (roblox_random "src/main.cpp" "src/random/random.cpp")
+
 target_include_directories(roblox_random PRIVATE "include/")
 
 if (CMAKE_VERSION VERSION_GREATER 3.12)
