@@ -1,20 +1,26 @@
-﻿cmake_minimum_required (VERSION 3.10)
+﻿cmake_minimum_required(VERSION 3.14)
 
 if (POLICY CMP0141)
   cmake_policy(SET CMP0141 NEW)
-  set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT "$<IF:$<AND:$<C_COMPILER_ID:MSVC>,$<CXX_COMPILER_ID:MSVC>>,$<$<CONFIG:Debug,RelWithDebInfo>:EditAndContinue>,$<$<CONFIG:Debug,RelWithDebInfo>:ProgramDatabase>>")
 endif()
 
-project ("RobloxRandom")
+project("RobloxRandom" LANGUAGES CXX)
 
-set(SRC_FILES
-	"src/main.cpp"
-	"src/random/random.cpp"
+set(CMAKE_CXX_STANDARD 23)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+set(LIB_SRC_FILES
+    "src/random/random.cpp"
 )
 
-add_executable (roblox_random_cli ${SRC_FILES})
-target_include_directories(roblox_random_cli PRIVATE "include/")
+add_library(RobloxRandom ${LIB_SRC_FILES})
 
-if (CMAKE_VERSION VERSION_GREATER 3.12)
-  set_property(TARGET roblox_random_cli PROPERTY CXX_STANDARD 26)
+target_include_directories(RobloxRandom PUBLIC 
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:include>
+)
+
+if(CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
+    add_executable(roblox_random_cli "src/main.cpp")
+    target_link_libraries(roblox_random_cli PRIVATE RobloxRandom)
 endif()
