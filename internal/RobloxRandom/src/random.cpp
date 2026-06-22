@@ -294,7 +294,7 @@ std::optional<uint64_t> RobloxRandom::Random::find_seed_from_sequence(const std:
 
     for (uint64_t seed = 0; seed <= 0xFFFFFFFFULL; ++seed) {
 
-        uint64_t current_state = (105ULL + seed) * PCG_MULTIPLIER + PCG_INCREMENT;
+        uint64_t current_state = (PCG_INCREMENT + seed) * PCG_MULTIPLIER + PCG_INCREMENT;
         int64_t generated;
 
         if (is_large_range) {
@@ -362,7 +362,7 @@ std::optional<uint64_t> RobloxRandom::Random::find_seed_from_sequence(const std:
     }
 
     auto check_seed = [&](uint64_t seed) -> bool {
-        uint64_t active_state = (105ULL + seed) * PCG_MULTIPLIER + PCG_INCREMENT;
+        uint64_t active_state = (PCG_INCREMENT + seed) * PCG_MULTIPLIER + PCG_INCREMENT;
         for (size_t i = 0; i < prepared_targets.size(); ++i) {
             uint64_t next_state_step = PCG_MULTIPLIER * active_state + PCG_INCREMENT;
             uint32_t check_low = std::rotr<uint32_t>(static_cast<uint32_t>((active_state >> 27) ^ (active_state >> 45)), static_cast<int>(active_state >> 59));
