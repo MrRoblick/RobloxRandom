@@ -1,4 +1,4 @@
-#include <random/random.h>
+#include <RobloxRandom/random.h>
 #include <algorithm>
 #include <bit>
 #include <chrono>
@@ -17,23 +17,23 @@
 #include <pthread.h>
 #endif
 
-std::atomic<uint64_t> Random::global_entropy_seed{ 0 };
-std::atomic<uint64_t> Random::global_entropy_seed_value{ 0 };
-std::atomic<uint32_t> Random::entropy_counter{ 0 };
-std::atomic<uint8_t>  Random::entropy_mutex_lock{ 0 };
+std::atomic<uint64_t> RobloxRandom::Random::global_entropy_seed{ 0 };
+std::atomic<uint64_t> RobloxRandom::Random::global_entropy_seed_value{ 0 };
+std::atomic<uint32_t> RobloxRandom::Random::entropy_counter{ 0 };
+std::atomic<uint8_t>  RobloxRandom::Random::entropy_mutex_lock{ 0 };
 
 
-uint64_t Random::get_nanoseconds_monotonic() {
+uint64_t RobloxRandom::Random::get_nanoseconds_monotonic() {
     auto now = std::chrono::steady_clock::now();
     return std::chrono::duration_cast<std::chrono::nanoseconds>(now.time_since_epoch()).count();
 }
 
-uint64_t Random::get_microseconds_realtime() {
+uint64_t RobloxRandom::Random::get_microseconds_realtime() {
     auto now = std::chrono::system_clock::now();
     return std::chrono::duration_cast<std::chrono::microseconds>(now.time_since_epoch()).count();
 }
 
-uint64_t Random::get_nanoseconds_float() {
+uint64_t RobloxRandom::Random::get_nanoseconds_float() {
     auto now = std::chrono::steady_clock::now();
     auto duration = now.time_since_epoch();
     auto seconds = std::chrono::duration_cast<std::chrono::seconds>(duration).count();
@@ -49,7 +49,7 @@ uint64_t Random::get_nanoseconds_float() {
     }
 }
 
-uint64_t Random::get_current_pid() {
+uint64_t RobloxRandom::Random::get_current_pid() {
 #if defined(_WIN32) || defined(_WIN64)
     return static_cast<uint64_t>(GetCurrentProcessId());
 #else
@@ -57,7 +57,7 @@ uint64_t Random::get_current_pid() {
 #endif
 }
 
-uint64_t Random::get_current_thread_id() {
+uint64_t RobloxRandom::Random::get_current_thread_id() {
 #if defined(_WIN32) || defined(_WIN64)
     return static_cast<uint64_t>(GetCurrentThreadId());
 #else
@@ -65,7 +65,7 @@ uint64_t Random::get_current_thread_id() {
 #endif
 }
 
-uint64_t Random::entropy_seed() {
+uint64_t RobloxRandom::Random::entropy_seed() {
     uint64_t base_seed = global_entropy_seed.load(std::memory_order_relaxed);
     if (!base_seed) {
         uint64_t mono_ns_contrib = 7ULL * get_nanoseconds_monotonic();
@@ -98,7 +98,7 @@ uint64_t Random::entropy_seed() {
     return (static_cast<uint64_t>(pcg_high) << 32) | pcg_low;
 }
 
-void Random::safe_gen_entropy_seed() {
+void RobloxRandom::Random::safe_gen_entropy_seed() {
     uint8_t expected = 0;
     if (entropy_mutex_lock.compare_exchange_strong(expected, 1, std::memory_order_acquire, std::memory_order_relaxed)) {
         global_entropy_seed_value.store(entropy_seed(), std::memory_order_release);
@@ -106,7 +106,7 @@ void Random::safe_gen_entropy_seed() {
     }
 }
 
-uint64_t Random::hash_seed(std::atomic<uint64_t>& entropy_seed_value_ptr) {
+uint64_t RobloxRandom::Random::hash_seed(std::atomic<uint64_t>& entropy_seed_value_ptr) {
     uint64_t initial_seed = entropy_seed_value_ptr.load(std::memory_order_relaxed);
     uint64_t next_seed_step = PCG_MULTIPLIER * initial_seed + PCG_INCREMENT;
 
@@ -137,18 +137,18 @@ uint64_t Random::hash_seed(std::atomic<uint64_t>& entropy_seed_value_ptr) {
     return (static_cast<uint64_t>(pcg_high) << 32) | pcg_low;
 }
 
-uint64_t Random::generate_roblox_default_seed() {
+uint64_t RobloxRandom::Random::generate_roblox_default_seed() {
     safe_gen_entropy_seed();
     uint64_t hashed_entropy = hash_seed(global_entropy_seed_value);
     return PCG_MULTIPLIER * hashed_entropy + 0x399D2694695129DELL;
 }
 
 
-Random::Random() {
+RobloxRandom::Random::Random() {
     state = generate_roblox_default_seed();
 }
 
-Random::Random(uint64_t seed) {
+RobloxRandom::Random::Random(uint64_t seed) {
     uint64_t temp_state = 0;
     temp_state = temp_state * PCG_MULTIPLIER + PCG_INCREMENT;
     temp_state += seed;
@@ -156,7 +156,7 @@ Random::Random(uint64_t seed) {
     state = temp_state;
 }
 
-uint64_t Random::next_integer(int64_t min_val, int64_t max_val) {
+uint64_t RobloxRandom::Random::next_integer(int64_t min_val, int64_t max_val) {
     uint64_t clean_min = (std::min)(static_cast<uint64_t>(min_val), static_cast<uint64_t>(max_val));
     uint64_t clean_max = (std::max)(static_cast<uint64_t>(min_val), static_cast<uint64_t>(max_val));
     uint64_t range = clean_max - clean_min;
@@ -189,7 +189,7 @@ uint64_t Random::next_integer(int64_t min_val, int64_t max_val) {
     }
 }
 
-double Random::next_double() {
+double RobloxRandom::Random::next_double() {
     uint64_t current_state = state;
 
     uint64_t next_state = current_state * PCG_MULTIPLIER + PCG_INCREMENT;
@@ -203,11 +203,11 @@ double Random::next_double() {
     return std::ldexp(static_cast<double>(rand64), -64);
 }
 
-double Random::next_number() {
+double RobloxRandom::Random::next_number() {
     return next_double();
 }
 
-double Random::next_number(double min_val, double max_val) {
+double RobloxRandom::Random::next_number(double min_val, double max_val) {
     double clean_min = (std::min)(min_val, max_val);
     double clean_max = (std::max)(min_val, max_val);
 
@@ -220,7 +220,7 @@ double Random::next_number(double min_val, double max_val) {
     return result;
 }
 
-Vector3 Random::next_unit_vector() {
+RobloxRandom::Structures::Vector3 RobloxRandom::Random::next_unit_vector() {
     uint64_t current_state = state;
 
     uint64_t next_state = current_state * PCG_MULTIPLIER + PCG_INCREMENT;
@@ -236,14 +236,16 @@ Vector3 Random::next_unit_vector() {
     float z_coord = static_cast<float>(height_fraction * 2.0 - 1.0);
     float radius_xy = std::sqrt(1.0f - z_coord * z_coord);
 
-    return Vector3{
+    return RobloxRandom::Structures::Vector3{
         std::cos(azimuth_angle) * radius_xy,
         std::sin(azimuth_angle) * radius_xy,
         z_coord
     };
 }
 
-std::optional<uint64_t> Random::find_seed(int64_t target, int64_t min_val, int64_t max_val) {
+
+#ifdef ROBLOX_RANDOM_ENABLE_SEED_FINDER
+std::optional<uint64_t> RobloxRandom::Random::find_seed(int64_t target, int64_t min_val, int64_t max_val) {
     uint64_t range = max_val - min_val;
 
     if ((range >> 1) > 0x7FFFFFFE) {
@@ -278,7 +280,7 @@ std::optional<uint64_t> Random::find_seed(int64_t target, int64_t min_val, int64
     return std::nullopt;
 }
 
-std::optional<uint64_t> Random::find_seed_from_sequence(const std::vector<int64_t>& sequence, int64_t min_val, int64_t max_val) {
+std::optional<uint64_t> RobloxRandom::Random::find_seed_from_sequence(const std::vector<int64_t>& sequence, int64_t min_val, int64_t max_val) {
     if (sequence.empty()) return std::nullopt;
 
     uint64_t clean_min = (std::min)(static_cast<uint64_t>(min_val), static_cast<uint64_t>(max_val));
@@ -296,7 +298,7 @@ std::optional<uint64_t> Random::find_seed_from_sequence(const std::vector<int64_
         int64_t generated;
 
         if (is_large_range) {
-            Random test_rand(seed);
+            RobloxRandom::Random test_rand(seed);
             generated = test_rand.next_integer(min_val, max_val);
             if (generated == first_target) {
                 bool match = true;
@@ -314,7 +316,7 @@ std::optional<uint64_t> Random::find_seed_from_sequence(const std::vector<int64_
             generated = clean_min + ((static_cast<uint64_t>(rand_low) * (range + 1)) >> 32);
 
             if (generated == first_target) {
-                Random test_rand(seed);
+                RobloxRandom::Random test_rand(seed);
                 test_rand.next_integer(min_val, max_val);
 
                 bool match = true;
@@ -331,7 +333,7 @@ std::optional<uint64_t> Random::find_seed_from_sequence(const std::vector<int64_
     return std::nullopt;
 }
 
-std::optional<uint64_t> Random::find_seed_from_sequence(const std::vector<TargetInfo>& targets) {
+std::optional<uint64_t> RobloxRandom::Random::find_seed_from_sequence(const std::vector<RobloxRandom::Structures::TargetInfo>& targets) {
     if (targets.empty()) {
         return std::nullopt;
     }
@@ -540,3 +542,4 @@ std::optional<uint64_t> Random::find_seed_from_sequence(const std::vector<Target
 
     return std::nullopt;
 }
+#endif // ROBLOX_RANDOM_ENABLE_SEED_FINDER
